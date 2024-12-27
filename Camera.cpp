@@ -78,4 +78,8 @@ namespace gps {
     void Camera::setPlaneBindVar(bool planeBind) {
         this->planeBind = planeBind;
     }
+
+    glm::vec3 Camera::getCameraTarget() {
+        return this->cameraTarget;
+    }
 }

@@ -151,6 +151,14 @@
     <ClInclude Include="tiny_obj_loader.h" />
     <ClInclude Include="Window.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\basic.frag" />
+    <None Include="shaders\basic.vert" />
+    <None Include="shaders\depth.frag" />
+    <None Include="shaders\depth.vert" />
+    <None Include="shaders\screenQuad.frag" />
+    <None Include="shaders\screenQuad.vert" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
