@@ -22,12 +22,13 @@ void main()
 	fPosEye = view * model * vec4(vPosition, 1.0f);
 	fNormal = normalize(normalMatrix * vNormal);
 	fTexCoords = vTexCoords;
-	for (int i = 0; i < 4; ++i) {
+	fragPosLightSpace=vec4(0.0f);
+	/*for (int i = 0; i < 4; ++i) {
         if (fPosEye.z < cascadeSplits[i]) {
             fragPosLightSpace = lightSpaceTrMatrix[i] * model * vec4(vPosition, 1.0f);
             break;
         }
-    }
+    }*/
 	
 	gl_Position = projection * view * model * vec4(vPosition, 1.0f);
 }

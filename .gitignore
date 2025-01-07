@@ -39,6 +39,9 @@
 models/
 Final_project/
 x64/
+skybox/
+violentdays/
+nightsky/
 
 ### VisualStudio ###
 ## Ignore Visual Studio temporary files, build results, and

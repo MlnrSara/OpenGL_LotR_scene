@@ -25,6 +25,16 @@ vec3 specular;
 float specularStrength = 0.5f;
 float shininess = 32.0f;
 
+//for the positional lights
+float linear = 0.09f;
+float quadratic = 0.032f;
+float constant = 1.0f;
+
+uniform vec3 eyeLightPos;
+uniform vec3 positionalLightColor; 
+
+uniform mat4 view;
+
 void computeLightComponents()
 {		
 	vec3 cameraPosEye = vec3(0.0f);//in eye coordinates, the viewer is situated at the origin
@@ -45,9 +55,21 @@ void computeLightComponents()
 	diffuse = max(dot(normalEye, lightDirN), 0.0f) * lightColor;
 	
 	//compute specular light
-	vec3 halfVector = normalize(lightDirN + viewDirN);
-	float specCoeff = pow(max(dot(normalEye, halfVector), 0.0f), shininess);
+	vec3 reflection = reflect(-lightDirN, normalEye);
+	float specCoeff = pow(max(dot(viewDirN, reflection), 0.0f), shininess);
 	specular = specularStrength * specCoeff * lightColor;
+
+	vec3 lightPos = (view * vec4(eyeLightPos, 1.0f)).xyz;
+	normalEye = normalize(fNormal);
+	viewDirN = normalize(cameraPosEye - fPosEye.xyz);
+	lightDirN = normalize(lightPos - fPosEye.xyz);
+	float dist = length(lightPos - fPosEye.xyz);
+	float att = 1.0f / (constant + linear * dist + quadratic * (dist * dist));
+	vec3 halfVector = normalize(lightDirN + viewDirN);
+	ambient += att * ambientStrength * positionalLightColor;
+	diffuse += att * max(dot(normalEye, lightDirN), 0.0f) * positionalLightColor;
+	specCoeff = pow(max(dot(normalEye, halfVector), 0.0f), shininess);
+	specular += att * specularStrength * specCoeff * positionalLightColor;
 }
 
 float computeShadow(int cascadeIndex){
@@ -62,6 +84,13 @@ float computeShadow(int cascadeIndex){
 	if (normalizedCoords.z > 1.0f) return 0.0f;
 
 	return shadow;
+}
+
+float computeFog() { 
+	float fogDensity = 0.05f; 
+	float fragmentDistance = length(fPosEye); 
+	float fogFactor = exp(-pow(fragmentDistance * fogDensity, 2)); 
+	return clamp(fogFactor, 0.0f, 1.0f); 
 }
 
 void main() 
@@ -82,6 +111,11 @@ void main()
         }
     }
 	vec3 color = min((ambient + (1.0f - shadow)*diffuse) + (1.0f - shadow)*specular, 1.0f);
+
+	float fogFactor = computeFog();
+	vec4 fogColor = vec4(0.8f, 0.1f, 0.1f, 1.0f);
+	vec4 auxColor = vec4(color, 1.0f);
+	fColor = fogColor * (1-fogFactor) + auxColor * fogFactor;
     
-    fColor = vec4(color, 1.0f);
+    //fColor = vec4(color, 1.0f);
 }

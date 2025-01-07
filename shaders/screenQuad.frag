@@ -8,6 +8,9 @@ uniform sampler2D depthMap;
 
 void main() 
 {    
-    fColor = vec4(vec3(texture(depthMap, fTexCoords).r), 1.0f);
+    vec4 colorFromTexture = texture(depthMap, fTexCoords);
+    if(colorFromTexture.a <0.1f)
+        discard;
+    fColor = colorFromTexture;
     //fColor = vec4(fTexCoords, 0.0f, 1.0f);
 }

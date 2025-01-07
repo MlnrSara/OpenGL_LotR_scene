@@ -6,8 +6,10 @@ layout(location=2) in vec2 vTexCoords;
 
 out vec2 fTexCoords;
 
+uniform float offsetY;
+
 void main() 
 {
-	fTexCoords = vTexCoords;
+	fTexCoords = vec2(vTexCoords.x, vTexCoords.y + offsetY);
 	gl_Position = vec4(vPosition, 1.0f);
 }
