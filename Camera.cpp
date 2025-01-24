@@ -8,8 +8,8 @@ namespace gps {
         this->cameraPosition = cameraPosition;
         this->cameraTarget = cameraTarget;
         this->sceneUpDirection = cameraUp;
-        this->cameraFrontDirection = glm::normalize(this->cameraTarget - this->cameraPosition);
-        this->cameraRightDirection = glm::normalize(glm::cross(this->cameraFrontDirection, this->sceneUpDirection));
+        this->cameraFrontDirection = glm::normalize(cameraTarget - cameraPosition);
+        this->cameraRightDirection = glm::normalize(glm::cross(-this->cameraFrontDirection, this->sceneUpDirection));
         this->cameraRightDirection *= -1;
         this->cameraUpDirection = (glm::cross(-this->cameraFrontDirection, this->cameraRightDirection));
         this->planeBind = true;
@@ -48,10 +48,10 @@ namespace gps {
             if (direction == MOVE_FORWARD) {
                 this->cameraPosition += speed * (this->cameraFrontDirection);
             }
-            if (direction == MOVE_LEFT) {
+            if (direction == MOVE_RIGHT) {
                 this->cameraPosition += speed * this->cameraRightDirection;
             }
-            if (direction == MOVE_RIGHT) {
+            if (direction == MOVE_LEFT) {
                 this->cameraPosition += speed * (-1) * this->cameraRightDirection;
             }
         }
@@ -77,5 +77,9 @@ namespace gps {
 
     void Camera::setPlaneBindVar(bool planeBind) {
         this->planeBind = planeBind;
+    }
+
+    glm::vec3 Camera::getCameraPosition() {
+        return this->cameraPosition;
     }
 }

@@ -21,8 +21,7 @@ void main()
 	fPosEye = view * model * vec4(vPosition, 1.0f);
 	fNormal = normalize(normalMatrix * vNormal);
 	fTexCoords = vTexCoords;
-
-    fragPosLightSpace = lightSpaceTrMatrix * model * vec4(vPosition, 1.0f);
+	fragPosLightSpace = lightSpaceTrMatrix * model * vec4(vPosition, 1.0f);
 	
 	gl_Position = projection * view * model * vec4(vPosition, 1.0f);
 }
