@@ -9,7 +9,7 @@ namespace gps {
         this->cameraTarget = cameraTarget;
         this->sceneUpDirection = cameraUp;
         this->cameraFrontDirection = glm::normalize(cameraTarget - cameraPosition);
-        this->cameraRightDirection = glm::normalize(glm::cross(this->cameraFrontDirection, this->sceneUpDirection));
+        this->cameraRightDirection = glm::normalize(glm::cross(-this->cameraFrontDirection, this->sceneUpDirection));
         this->cameraRightDirection *= -1;
         this->cameraUpDirection = (glm::cross(-this->cameraFrontDirection, this->cameraRightDirection));
         this->planeBind = true;

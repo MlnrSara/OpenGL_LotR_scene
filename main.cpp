@@ -44,27 +44,29 @@ GLint lightDirLoc;
 GLint lightColorLoc;
 
 // camera
+//gps::Camera myCamera(
+//    glm::vec3(0.0f, 0.75f, 3.0f),
+//    glm::vec3(0.0f, 0.0f, -10.0f),
+//    glm::vec3(0.0f, 1.0f, 0.0f));
 gps::Camera myCamera(
-    glm::vec3(0.0f, 0.75f, 3.0f),
-    glm::vec3(0.0f, 0.0f, -10.0f),
-    glm::vec3(0.0f, 1.0f, 0.0f));
-/*gps::Camera myCamera(
     glm::vec3(6.8549f, 0.75f, -38.671f),
     glm::vec3(7.0143f, 1.0f, -34.929f),
-    glm::vec3(0.0f, 1.0f, 0.0f));*/
+    glm::vec3(0.0f, 1.0f, 0.0f));
 
 GLfloat cameraSpeed = 0.1f;
 
 GLboolean pressedKeys[1024];
 
 // models
-gps::Model3D teapot;
+//gps::Model3D teapot;
 gps::Model3D shireLandscape;
 gps::Model3D shireObjects;
-gps::Model3D screenQuad;
+gps::Model3D ashQuad;
 gps::Model3D shireAnimals;
 gps::Model3D stingSword;
 gps::Model3D goose;
+gps::Model3D screenQuad;
+gps::Model3D secondAshQuad;
 
 gps::Model3D mordorLandscape;
 gps::Model3D mordorEye;
@@ -86,19 +88,19 @@ double mouseY;
 float pitch = 0.0f;
 float yaw = 0.0f;
 
-bool line = true;
+int line = 0;
 
 //shadow params
-const int numCascades = 4;
-GLuint shadowMapFBOs[numCascades];
-GLuint shadowMaps[numCascades];
-const int shadowMapResolution = 2048;
+const unsigned int SHADOW_WIDTH = 8192;
+const unsigned int SHADOW_HEIGHT = 8192;
+GLuint shadowMapFBO;
 GLuint depthMapTexture;
 bool showDepthMap;
 
 //ring coordinates -> x=-6.45 y=0.7 z=0.06 blender
 const glm::vec3 shireRingPos = glm::vec3(-6.45f, 0.06f, -0.7f);
 const glm::vec3 mordorRingPos = glm::vec3(-10.289f, 0.22796f, -9.9485f);
+const glm::vec3 gooseOrigin = glm::vec3(-6.8836f, 2.5526f, -0.15941f);
 
 //houses locations
 const glm::vec3 bilboHousePos = glm::vec3(7.8661f, 0.62342f, -10.776f);
@@ -132,7 +134,7 @@ GLint eyeLightPosLocation;
 bool night = false;
 
 //translation vars
-float hoverSpeed = 50.0f;
+float hoverSpeed = 0.01f;
 float currentYPos = 0.0f;
 
 float rotationSpeed = 1600.0f;
@@ -149,7 +151,7 @@ gps::SkyBox nightSkybox;
 gps::SkyBox mordorSkybox;
 
 //camera animation
-bool presenting = false;
+bool presenting = true;
 int firstRotation = 0;
 int transitionForwardFirst = 0;
 int secondRotation = 0;
@@ -169,7 +171,7 @@ bool shire = true;
 
 //ashfall
 float offsetY = 0.0f;
-float speed = 0.1f; // Speed of the ashfall
+float speed = 0.07f; // Speed of the ashfall
 unsigned int ashTexture;
 
 // grid
@@ -198,8 +200,8 @@ double lastTime = glfwGetTime();
 void initAngles() {
     
     glm::mat4 auxMatrix = myCamera.getViewMatrix();
-    yaw = -glm::degrees(atan2(-auxMatrix[2][0], auxMatrix[2][2]));
-    pitch = -glm::degrees(asin(auxMatrix[2][1]));
+    yaw = -glm::degrees(atan2(-auxMatrix[0][2], auxMatrix[2][2]));
+    pitch = -glm::degrees(asin(auxMatrix[1][2]));
 }
 
 // Load the texture
@@ -368,8 +370,14 @@ void windowResizeCallback(GLFWwindow* window, int width, int height) {
     projection = glm::perspective(glm::radians(45.0f),
         (float)wd.width / (float)wd.height,
         0.1f, 50.0f);
-    glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
+    myBasicShader.useShaderProgram();
+    glUniformMatrix4fv(glGetUniformLocation(myBasicShader.shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    nightShader.useShaderProgram();
+    glUniformMatrix4fv(glGetUniformLocation(nightShader.shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    mordorShader.useShaderProgram();
+    glUniformMatrix4fv(glGetUniformLocation(mordorShader.shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    lavaShader.useShaderProgram();
+    glUniformMatrix4fv(glGetUniformLocation(lavaShader.shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
     glViewport(0, 0, wd.width, wd.height);
 }
 
@@ -386,75 +394,80 @@ void keyboardCallback(GLFWwindow* window, int key, int scancode, int action, int
             pressedKeys[key] = false;
         }
     }
+    if (!presenting) {
+        if (key == GLFW_KEY_F && action == GLFW_PRESS) {
+            if (line % 3 == 1) {
+                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                line++;
+            }
+            else if (line % 3 == 2) {
+                glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
+                line++;
+            }
+            else {
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+                line++;
+            }
 
-    if (key == GLFW_KEY_F && action == GLFW_PRESS) {
-        if (line) {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            line = false;
-        }
-        else {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-            line = true;
-        }
-
-    }
-
-    if (key == GLFW_KEY_M && action == GLFW_PRESS) {
-        if (showDepthMap) {
-            showDepthMap = false;
-        }
-        else {
-            showDepthMap = true;
         }
 
-    }
+        if (key == GLFW_KEY_M && action == GLFW_PRESS) {
+            if (showDepthMap) {
+                showDepthMap = false;
+            }
+            else {
+                showDepthMap = true;
+            }
 
-    if (key == GLFW_KEY_G && action == GLFW_PRESS) {
-        if (myCamera.getPlaneBindVar()) {
-            myCamera.setPlaneBindVar(false);
-        }
-        else {
-            myCamera.setPlaneBindVar(true);
         }
 
-    }
+        if (key == GLFW_KEY_G && action == GLFW_PRESS) {
+            if (myCamera.getPlaneBindVar()) {
+                myCamera.setPlaneBindVar(false);
+            }
+            else {
+                myCamera.setPlaneBindVar(true);
+            }
 
-    if (key == GLFW_KEY_N && action == GLFW_PRESS) {
-        if (!night) {
-            nightShader.useShaderProgram();
-            viewLoc = glGetUniformLocation(nightShader.shaderProgram, "view");
-            modelLoc = glGetUniformLocation(nightShader.shaderProgram, "model");
-            normalMatrixLoc = glGetUniformLocation(nightShader.shaderProgram, "normalMatrix");
-            projectionLoc = glGetUniformLocation(nightShader.shaderProgram, "projection");
-            glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
-            lightDirLoc = glGetUniformLocation(nightShader.shaderProgram, "lightDir");
-            glUniform3fv(lightDirLoc, 1, glm::value_ptr(lightDir));
-            lightColor = glm::vec3(0.0f, 0.0f, 1.0f);
-            lightColorLoc = glGetUniformLocation(nightShader.shaderProgram, "lightColor");
-            glUniform3fv(lightColorLoc, 1, glm::value_ptr(lightColor));
+        }
 
-            glUniform3fv(positionalLightColorLocation, 1, glm::value_ptr(positionalLightColor));
-            
-            glUniform3fv(bilboHouseL1Location, 1, glm::value_ptr(bilboHouseL1));
-            glUniform3fv(bilboHouseL2Location, 1, glm::value_ptr(bilboHouseL2));
-            glUniform3fv(bilboHouseL3Location, 1, glm::value_ptr(bilboHouseL3));
-            glUniform3fv(otherHouseL1Location, 1, glm::value_ptr(otherHouseL1));
-            glUniform3fv(otherHouseL2Location, 1, glm::value_ptr(otherHouseL2));
-            glUniform3fv(otherHouseL3Location, 1, glm::value_ptr(otherHouseL3));
+        if (key == GLFW_KEY_N && action == GLFW_PRESS) {
+            if (!night) {
+                nightShader.useShaderProgram();
+                viewLoc = glGetUniformLocation(nightShader.shaderProgram, "view");
+                modelLoc = glGetUniformLocation(nightShader.shaderProgram, "model");
+                normalMatrixLoc = glGetUniformLocation(nightShader.shaderProgram, "normalMatrix");
+                projectionLoc = glGetUniformLocation(nightShader.shaderProgram, "projection");
+                glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
+                lightDirLoc = glGetUniformLocation(nightShader.shaderProgram, "lightDir");
+                glUniform3fv(lightDirLoc, 1, glm::value_ptr(lightDir));
+                lightColor = glm::vec3(0.0f, 0.0f, 1.0f);
+                lightColorLoc = glGetUniformLocation(nightShader.shaderProgram, "lightColor");
+                glUniform3fv(lightColorLoc, 1, glm::value_ptr(lightColor));
+
+                glUniform3fv(positionalLightColorLocation, 1, glm::value_ptr(positionalLightColor));
+
+                glUniform3fv(bilboHouseL1Location, 1, glm::value_ptr(bilboHouseL1));
+                glUniform3fv(bilboHouseL2Location, 1, glm::value_ptr(bilboHouseL2));
+                glUniform3fv(bilboHouseL3Location, 1, glm::value_ptr(bilboHouseL3));
+                glUniform3fv(otherHouseL1Location, 1, glm::value_ptr(otherHouseL1));
+                glUniform3fv(otherHouseL2Location, 1, glm::value_ptr(otherHouseL2));
+                glUniform3fv(otherHouseL3Location, 1, glm::value_ptr(otherHouseL3));
+            }
+            else {
+                myBasicShader.useShaderProgram();
+                viewLoc = glGetUniformLocation(myBasicShader.shaderProgram, "view");
+                modelLoc = glGetUniformLocation(myBasicShader.shaderProgram, "model");
+                normalMatrixLoc = glGetUniformLocation(myBasicShader.shaderProgram, "normalMatrix");
+                projectionLoc = glGetUniformLocation(myBasicShader.shaderProgram, "projection");
+                lightDirLoc = glGetUniformLocation(myBasicShader.shaderProgram, "lightDir");
+                glUniform3fv(lightDirLoc, 1, glm::value_ptr(lightDir));
+                lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
+                lightColorLoc = glGetUniformLocation(myBasicShader.shaderProgram, "lightColor");
+                glUniform3fv(lightColorLoc, 1, glm::value_ptr(lightColor));
+            }
+            night = !night;
         }
-        else {
-            myBasicShader.useShaderProgram();
-            viewLoc = glGetUniformLocation(myBasicShader.shaderProgram, "view");
-            modelLoc = glGetUniformLocation(myBasicShader.shaderProgram, "model");
-            normalMatrixLoc = glGetUniformLocation(myBasicShader.shaderProgram, "normalMatrix");
-            projectionLoc = glGetUniformLocation(myBasicShader.shaderProgram, "projection"); 
-            lightDirLoc = glGetUniformLocation(myBasicShader.shaderProgram, "lightDir");
-            glUniform3fv(lightDirLoc, 1, glm::value_ptr(lightDir));
-            lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
-            lightColorLoc = glGetUniformLocation(myBasicShader.shaderProgram, "lightColor");
-            glUniform3fv(lightColorLoc, 1, glm::value_ptr(lightColor));
-        }
-        night = !night;
     }
 }
 
@@ -558,21 +571,21 @@ void processMovement() {
             normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
         }
 
-        if (pressedKeys[GLFW_KEY_Q]) {
-            angle -= 1.0f;
-            // update model matrix for teapot
-            model = glm::rotate(glm::mat4(1.0f), glm::radians(angle), glm::vec3(0, 1, 0));
-            // update normal matrix for teapot
-            normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
-        }
+        //if (pressedKeys[GLFW_KEY_Q]) {
+        //    angle -= 1.0f;
+        //    // update model matrix for teapot
+        //    model = glm::rotate(glm::mat4(1.0f), glm::radians(angle), glm::vec3(0, 1, 0));
+        //    // update normal matrix for teapot
+        //    normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
+        //}
 
-        if (pressedKeys[GLFW_KEY_E]) {
-            angle += 1.0f;
-            // update model matrix for teapot
-            model = glm::rotate(glm::mat4(1.0f), glm::radians(angle), glm::vec3(0, 1, 0));
-            // update normal matrix for teapot
-            normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
-        }
+        //if (pressedKeys[GLFW_KEY_E]) {
+        //    angle += 1.0f;
+        //    // update model matrix for teapot
+        //    model = glm::rotate(glm::mat4(1.0f), glm::radians(angle), glm::vec3(0, 1, 0));
+        //    // update normal matrix for teapot
+        //    normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
+        //}
     }
    
 }
@@ -586,7 +599,7 @@ void setWindowCallbacks() {
     glfwSetWindowSizeCallback(myWindow.getWindow(), windowResizeCallback);
     glfwSetKeyCallback(myWindow.getWindow(), keyboardCallback);
     glfwSetCursorPosCallback(myWindow.getWindow(), mouseCallback);
-    //glfwSetInputMode(myWindow.getWindow(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(myWindow.getWindow(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 }
 
 void initOpenGLState() {
@@ -601,15 +614,17 @@ void initOpenGLState() {
 }
 
 void initModels() {
-    teapot.LoadModel("models/teapot/teapot20segUT.obj");
+    //teapot.LoadModel("models/teapot/teapot20segUT.obj");
     shireLandscape.LoadModel("models/shire/shireLandscape.obj");
     shireObjects.LoadModel("models/shire/shireObjects.obj");
     shireAnimals.LoadModel("models/shire/shireAnimals.obj");
-    screenQuad.LoadModel("models/quad/quad.obj");
+    ashQuad.LoadModel("models/quad/quad.obj");
     stingSword.LoadModel("models/shire/sting.obj");
     goose.LoadModel("models/shire/goose.obj");
     mordorLandscape.LoadModel("models/mordor/mordorLandscape.obj");
     mordorEye.LoadModel("models/mordor/mordorEye.obj");
+    screenQuad.LoadModel("models/shadow_quad/quad.obj");
+    secondAshQuad.LoadModel("models/secondQuad/secondQuad.obj");
 }
 
 void initShaders() {
@@ -719,7 +734,7 @@ void initUniforms() {
     myBasicShader.useShaderProgram();
 
     // create model matrix for teapot
-    model = glm::rotate(glm::mat4(1.0f), glm::radians(angle), glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::mat4(1.0f);
     modelLoc = glGetUniformLocation(myBasicShader.shaderProgram, "model");
 
     // get view matrix for current camera
@@ -735,13 +750,14 @@ void initUniforms() {
     // create projection matrix
     projection = glm::perspective(glm::radians(45.0f),
         (float)myWindow.getWindowDimensions().width / (float)myWindow.getWindowDimensions().height,
-        0.1f, 40.0f);
+        0.1f, 70.0f);
     projectionLoc = glGetUniformLocation(myBasicShader.shaderProgram, "projection");
     // send projection matrix to shader
     glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
     //set the light direction (direction towards the light)
-    lightDir = glm::vec3(0.0f, 1.0f, 1.0f);
+    //lightDir = glm::vec3(0.0f, 1.0f, 1.0f);
+    lightDir = glm::vec3(8.62f, 23.14f, -39.5f);
     lightDir = glm::normalize(lightDir);
     lightDirLoc = glGetUniformLocation(myBasicShader.shaderProgram, "lightDir");
     // send light dir to shader
@@ -792,177 +808,34 @@ void initSkybox() {
     mordorSkybox.Load(mordorFaces);
 }
 
-void renderTeapot(gps::Shader shader) {
-    // select active shader program
-    shader.useShaderProgram();
-
-    //send teapot model matrix data to shader
-    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-
-    //send teapot normal matrix data to shader
-    glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
-
-    // draw teapot
-    teapot.Draw(shader);
-    shireLandscape.Draw(shader);
-    //shireObjects.Draw(shader);
-}
-
 void initFBO() {
     //TODO - Create the FBO, the depth texture and attach the depth texture to the FBO
-    for (int i = 0; i < numCascades-1; i++) {
-        glGenFramebuffers(1, &shadowMapFBOs[i]);
-        glGenTextures(1, &shadowMaps[i]);
-
-        glBindTexture(GL_TEXTURE_2D, shadowMaps[i]);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowMapResolution, shadowMapResolution, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-        float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-
-        glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBOs[i]);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadowMaps[i], 0);
-        glDrawBuffer(GL_NONE);
-        glReadBuffer(GL_NONE);
-
-        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-            std::cerr << "Error: Shadow map framebuffer not complete for cascade " << i << std::endl;
-        }
-    }
-}
-
-std::vector<glm::vec4> getFrustumCornersWorldSpace(const glm::mat4& proj, const glm::mat4& view)
-{
-    const auto inv = glm::inverse(proj * view);
-
-    std::vector<glm::vec4> frustumCorners;
-    for (unsigned int x = 0; x < 2; ++x)
-    {
-        for (unsigned int y = 0; y < 2; ++y)
-        {
-            for (unsigned int z = 0; z < 2; ++z)
-            {
-                const glm::vec4 pt =
-                    inv * glm::vec4(
-                        2.0f * x - 1.0f,
-                        2.0f * y - 1.0f,
-                        2.0f * z - 1.0f,
-                        1.0f);
-                frustumCorners.push_back(pt / pt.w);
-            }
-        }
-    }
-
-    return frustumCorners;
-}
-
-glm::mat4 getLightViewMatrix(std::vector<glm::vec4> corners) {
-    glm::vec3 center = glm::vec3(0, 0, 0);
-    for (const auto& v : corners)
-    {
-        center += glm::vec3(v);
-    }
-    center /= corners.size();
-
-    const auto lightView = glm::lookAt(
-        center + lightDir,
-        center,
-        glm::vec3(0.0f, 1.0f, 0.0f)
-    );
-    return lightView;
-}
-
-glm::mat4 getLightProjectionMatrix(std::vector<glm::vec4> corners, glm::mat4 lightView) {
-    float minX = std::numeric_limits<float>::max();
-    float maxX = std::numeric_limits<float>::lowest();
-    float minY = std::numeric_limits<float>::max();
-    float maxY = std::numeric_limits<float>::lowest();
-    float minZ = std::numeric_limits<float>::max();
-    float maxZ = std::numeric_limits<float>::lowest();
-    for (const auto& v : corners)
-    {
-        const auto trf = lightView * v;
-        minX = std::min(minX, trf.x);
-        maxX = std::max(maxX, trf.x);
-        minY = std::min(minY, trf.y);
-        maxY = std::max(maxY, trf.y);
-        minZ = std::min(minZ, trf.z);
-        maxZ = std::max(maxZ, trf.z);
-    }
-
-    constexpr float zMult = 10.0f;
-    if (minZ < 0)
-    {
-        minZ *= zMult;
-    }
-    else
-    {
-        minZ /= zMult;
-    }
-    if (maxZ < 0)
-    {
-        maxZ /= zMult;
-    }
-    else
-    {
-        maxZ *= zMult;
-    }
-
-    const glm::mat4 lightProjection = glm::ortho(minX, maxX, minY, maxY, minZ, maxZ);
-    return lightProjection;
+    glGenFramebuffers(1, &shadowMapFBO);
+    glGenTextures(1, &depthMapTexture);
+    glBindTexture(GL_TEXTURE_2D, depthMapTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMapTexture, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 glm::mat4 computeLightSpaceTrMatrix() {
     //TODO - Return the light-space transformation matrix
-    
-    std::vector<glm::vec4> corners = getFrustumCornersWorldSpace(projection, view);
-
-    glm::mat4 lightView = getLightViewMatrix(corners);
-
-    glm::mat4 lightProjection = getLightProjectionMatrix(corners, lightView);
+    glm::mat4 lightView = glm::lookAt(lightDir, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    const GLfloat near_plane = -40.0f, far_plane = 50.0f;
+    glm::mat4 lightProjection = glm::ortho(-50.0f, 50.0f, -50.0f, 50.0f, near_plane, far_plane);
     glm::mat4 lightSpaceTrMatrix = lightProjection * lightView;
     return lightSpaceTrMatrix;
 }
 
-void calculateCascadeSplits(float near, float far, int numCascades, float* cascadeSplits) {
-    float lambda = 0.5f; // Blend factor between linear and logarithmic splits
-    for (int i = 0; i < numCascades; i++) {
-        float linearSplit = near + (far - near) * (i + 1) / numCascades;
-        float logSplit = near * pow(far / near, (i + 1) / float(numCascades));
-        cascadeSplits[i] = lambda * logSplit + (1.0f - lambda) * linearSplit;
-    }
-}
-
-std::vector<glm::mat4> calculateCascadeLightMatrices(const glm::mat4& cameraProj, const glm::mat4& cameraView, const glm::vec3& lightDir,const float* cascadeSplits) {
-    std::vector<glm::mat4> lightMatrices;
-
-    for (size_t i = 0; i < numCascades - 1; i++)
-    {
-        // Get the near and far planes for this cascade
-        float nearPlane = cascadeSplits[i];
-        float farPlane = cascadeSplits[i + 1];
-
-        // Extract frustum corners in world space for this cascade
-        glm::mat4 cascadeProj = glm::perspective(
-            glm::radians(45.0f), // FOV
-            (float)myWindow.getWindowDimensions().width / (float)myWindow.getWindowDimensions().height,                // Aspect ratio
-            nearPlane,
-            farPlane);
-
-        std::vector<glm::vec4> frustumCorners = getFrustumCornersWorldSpace(cascadeProj, cameraView);
-
-        glm::mat4 lightView = getLightViewMatrix(frustumCorners);
-
-        glm::mat4 lightProjection = getLightProjectionMatrix(frustumCorners, lightView);
-
-        lightMatrices.push_back(lightProjection * lightView);
-    }
-
-    return lightMatrices;
-}
 void renderGrid() {
 
     // select active shader program
@@ -1019,9 +892,6 @@ void renderGrid() {
 void drawObjects(gps::Shader shader, bool depthPass) {
     shader.useShaderProgram();
 
-    view = myCamera.getViewMatrix();
-    glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-
     if (!depthPass) {
         normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
         glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
@@ -1029,7 +899,7 @@ void drawObjects(gps::Shader shader, bool depthPass) {
 
     glUniformMatrix4fv(glGetUniformLocation(shader.shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
     if (shire) {
-        teapot.Draw(shader);
+        //teapot.Draw(shader);
         if (!night) {
             shireAnimals.Draw(shader);
         }
@@ -1046,19 +916,26 @@ void drawObjects(gps::Shader shader, bool depthPass) {
         stingSword.Draw(shader);
 
         if (!depthPass) {
-            currentYPos += hoverSpeed * elapsedTime;
+            currentYPos += hoverSpeed;
             if (currentYPos > 0.5f || currentYPos < 0.0f) {
                 hoverSpeed = -hoverSpeed;
             }
             glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(glm::mat3(glm::inverseTranspose(view * swordModel))));
         }
 
-        glm::mat4 gooseModel = glm::translate(glm::mat4(1.0f), glm::vec3(-7.8836f, 2.5526f, -1.15941f));
+        /*glm::mat4 gooseModel = glm::translate(glm::mat4(1.0f), glm::vec3(-7.8836f, 2.5526f, -1.15941f));
         gooseModel *= glm::rotate(glm::mat4(1.0f), glm::radians(gooseAngle), glm::vec3(0.0f, 1.0f, 0.0f));
         gooseModel *= glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, 1.0f));
         gooseModel *= glm::rotate(glm::mat4(1.0f), glm::radians(gooseShyAngle), glm::vec3(0.0f, 1.0f, 0.0f));
         gooseModel *= glm::inverse(glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, 1.0f)));
-        gooseModel *= glm::inverse(glm::translate(glm::mat4(1.0f), glm::vec3(-7.8836f, 2.5526f, -1.15941f)));
+        gooseModel *= glm::inverse(glm::translate(glm::mat4(1.0f), glm::vec3(-7.8836f, 2.5526f, -1.15941f)));*/
+        glm::mat4 gooseModel = glm::translate(glm::mat4(1.0f), shireRingPos);
+        gooseModel = glm::translate(gooseModel, gooseOrigin);
+        gooseModel = glm::rotate(gooseModel, glm::radians(-gooseShyAngle), glm::vec3(0.0f, 1.0f, 0.0f));
+        gooseModel = glm::translate(gooseModel, -gooseOrigin);
+        gooseModel = glm::rotate(gooseModel, glm::radians(-gooseAngle), glm::vec3(0.0f, 1.0f, 0.0f));
+        gooseModel = glm::translate(gooseModel, -shireRingPos);
+
         glUniformMatrix4fv(glGetUniformLocation(shader.shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(gooseModel));
         goose.Draw(shader);
         if (!depthPass) {
@@ -1070,8 +947,6 @@ void drawObjects(gps::Shader shader, bool depthPass) {
     else {
         //draw mordor
         glm::mat4 eyeModel = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, eyeCurrentPos, 0.0f));
-
-       
 
         mordorLandscape.Draw(shader);
         glUniformMatrix4fv(glGetUniformLocation(shader.shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(eyeModel));
@@ -1085,76 +960,49 @@ void drawObjects(gps::Shader shader, bool depthPass) {
             //eyeLightPos = glm::inverseTranspose(glm::mat3(view * eyeModel)) * eyeLightPos;
             //glUniform3fv(glGetUniformLocation(shader.shaderProgram, "eyeLightPos"), 1, glm::value_ptr(eyeLightPos));
         }
-        screenQuadShader.useShaderProgram();
-        float currentTime = glfwGetTime();
-        offsetY = fmod(currentTime * speed, 1.0f);
-        glUniform1f(glGetUniformLocation(screenQuadShader.shaderProgram, "offsetY"), offsetY);
-        screenQuad.Draw(screenQuadShader);
     }
     
 }
 
-void renderShadowMaps(const std::vector<glm::mat4>& lightMatrices) {
-    for (int i = 0; i < numCascades-1; i++) {
-        glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBOs[i]);
-        glViewport(0, 0, shadowMapResolution, shadowMapResolution);
-        glClear(GL_DEPTH_BUFFER_BIT);
-
-        // Bind appropriate shader for depth rendering
-        depthMapShader.useShaderProgram();
-        glUniformMatrix4fv(glGetUniformLocation(depthMapShader.shaderProgram, "lightSpaceMatrix"), 1, GL_FALSE, glm::value_ptr(lightMatrices[i]));
-
-        // Render the scene using the light's perspective
-        drawObjects(depthMapShader, true);
-    }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void renderWithShadows(gps::Shader shader, const std::vector<glm::mat4>& lightMatrices, const float* cascadeSplits) {
+void renderWithShadows(gps::Shader shader) {
     // Bind main shader
     shader.useShaderProgram();
 
-    // Pass cascade data
-    for (int i = 0; i < numCascades-1; ++i) {
-        std::string uniformName = "lightSpaceMatrices[" + std::to_string(i) + "]";
-        GLint location = glGetUniformLocation(shader.shaderProgram, uniformName.c_str());
-        glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(lightMatrices[i]));
-
-        glActiveTexture(GL_TEXTURE0 + i);
-        glBindTexture(GL_TEXTURE_2D, shadowMaps[i]);
-    }
-
-    // Send cascade splits
-    GLint splitsLocation = glGetUniformLocation(shader.shaderProgram, "cascadeSplits");
-    glUniform1fv(splitsLocation, numCascades, cascadeSplits);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, depthMapTexture);
+    glUniform1i(glGetUniformLocation(shader.shaderProgram, "shadowMap"), 3);
+    glUniformMatrix4fv(glGetUniformLocation(shader.shaderProgram, "lightSpaceTrMatrix"),
+        1,
+        GL_FALSE,
+        glm::value_ptr(computeLightSpaceTrMatrix()));
 
     // Render the scene
     drawObjects(shader, false);
 }
 
 void cameraAnimation(){
-    if (firstRotation < 15) {
-        myCamera.move(gps::MOVE_FORWARD, cameraSpeed);
-        pitch++;
+    if (firstRotation < 35) {
+        myCamera.move(gps::MOVE_FORWARD, cameraSpeed/2);
+        pitch+=0.5f;
         myCamera.rotate(yaw, pitch);
         firstRotation++;
     }
     else {
-        if (transitionForwardFirst < 20) {
-            myCamera.move(gps::MOVE_FORWARD, cameraSpeed);
+        if (transitionForwardFirst < 40) {
+            myCamera.move(gps::MOVE_FORWARD, cameraSpeed/2);
             transitionForwardFirst++;
         }
         else {
-            if (secondRotation < 40) {
-                yaw -= 0.1f;
-                pitch--;
-                myCamera.move(gps::MOVE_FORWARD, cameraSpeed);
+            if (secondRotation < 80) {
+                yaw -= 0.05f;
+                pitch-=0.5f;
+                myCamera.move(gps::MOVE_FORWARD, cameraSpeed/2);
                 myCamera.rotate(yaw, pitch);
                 secondRotation++;
             }
             else {
-                if (lookDown < 10) {
-                    yaw += 0.5f;
+                if (lookDown < 20) {
+                    yaw += 0.25f;
                     myCamera.rotate(yaw, pitch);
                     lookDown++;
                 }
@@ -1185,12 +1033,12 @@ void cameraAnimation(){
                                     transitionForwardThird++;
                                 }
 								else {
-									if (transitionForwardForth < 45) {
+									if (transitionForwardForth < 40) {
 										myCamera.move(gps::MOVE_FORWARD, cameraSpeed * 2);
 										transitionForwardForth++;
 									}
 									else {
-										if (sixthRotation < 80) {
+										if (sixthRotation < 70) {
 											myCamera.move(gps::MOVE_FORWARD, cameraSpeed);
 											pitch--;
 											yaw -= 0.1f;
@@ -1203,13 +1051,14 @@ void cameraAnimation(){
 												transitionForwardFifth++;
 											}
 											else {
-												if (seventhRotation < 90) {
+												if (seventhRotation < 70) {
 													pitch--;
 													myCamera.rotate(yaw, pitch);
 													seventhRotation++;
 												}
 												else {
 													presenting = false;
+                                                    initAngles();
 												}
 											}
 										}
@@ -1230,45 +1079,85 @@ void renderScene() {
 
     //render the scene
 
-    // render the teapot
-    //renderTeapot(myBasicShader);
-    float cascadeSplits[numCascades];
-    calculateCascadeSplits(0.1f, 40.0f, numCascades, cascadeSplits);
+    depthMapShader.useShaderProgram();
 
-    std::vector<glm::mat4> lightMatrices = calculateCascadeLightMatrices(projection, view, lightDir, cascadeSplits);
-    /*std::cout << "Light Matrices Size: " << lightMatrices.size() << std::endl;
-    for (size_t i = 0; i < lightMatrices.size(); ++i) {
-        std::cout << "Matrix " << i << ": " << glm::to_string(lightMatrices[i]) << std::endl;
-    }*/
-    renderShadowMaps(lightMatrices);
-    if (shire) {
-        if (!night) {
-            renderWithShadows(myBasicShader, lightMatrices, cascadeSplits);
-            daySkybox.Draw(skyboxShader, view, projection);
-        }
-        else {
-            renderWithShadows(nightShader, lightMatrices, cascadeSplits);
-            nightSkybox.Draw(skyboxShader, view, projection);
-        }
+    glUniformMatrix4fv(glGetUniformLocation(depthMapShader.shaderProgram, "lightSpaceTrMatrix"), 1, GL_FALSE, glm::value_ptr(computeLightSpaceTrMatrix()));
+    glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+    glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
+    glClear(GL_DEPTH_BUFFER_BIT);
+    drawObjects(depthMapShader, true);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (showDepthMap) {
+        glViewport(0, 0, myWindow.getWindowDimensions().width, myWindow.getWindowDimensions().height);
 
-        if (getCameraDistance(shireRingPos) < 2.0f) {
-            std::cout << "Near ring!" << std::endl;
-            shire = false;
-            initMordorUniforms();
-            myCamera.setPlaneBindVar(false);
-        }
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        screenQuadShader.useShaderProgram();
+
+        //bind the depth map
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, depthMapTexture);
+        glUniform1i(glGetUniformLocation(screenQuadShader.shaderProgram, "depthMap"), 0);
+
+        glDisable(GL_DEPTH_TEST);
+        screenQuad.Draw(screenQuadShader);
+        glEnable(GL_DEPTH_TEST);
     }
     else {
-        renderWithShadows(mordorShader, lightMatrices, cascadeSplits);
-        glCheckError();
-        renderGrid();
-        glCheckError();
-        mordorSkybox.Draw(skyboxShader, view, projection);
-        if (getCameraDistance(mordorRingPos) < 2.0f) {
-            std::cout << "Near ring!" << std::endl;
-            shire = true;
-            initUniforms();
-            myCamera.setPlaneBindVar(true);
+        glViewport(0, 0, myWindow.getWindowDimensions().width, myWindow.getWindowDimensions().height);
+
+        glClear(GL_COLOR_BUFFER_BIT);
+        if (shire) {
+            if (!night) {
+                myBasicShader.useShaderProgram();
+                view = myCamera.getViewMatrix();
+                glUniformMatrix4fv(glGetUniformLocation(myBasicShader.shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+                normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
+                glUniformMatrix3fv(glGetUniformLocation(myBasicShader.shaderProgram, "normalMatrix"), 1, GL_FALSE, glm::value_ptr(normalMatrix));
+                renderWithShadows(myBasicShader);
+                daySkybox.Draw(skyboxShader, view, projection);
+            }
+            else {
+                nightShader.useShaderProgram();
+                view = myCamera.getViewMatrix();
+                glUniformMatrix4fv(glGetUniformLocation(nightShader.shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+                normalMatrix = glm::mat3(glm::inverseTranspose(view * model));
+                glUniformMatrix3fv(glGetUniformLocation(nightShader.shaderProgram, "normalMatrix"), 1, GL_FALSE, glm::value_ptr(normalMatrix));
+                renderWithShadows(nightShader);
+                nightSkybox.Draw(skyboxShader, view, projection);
+            }
+
+            if (getCameraDistance(shireRingPos) < 2.0f) {
+                std::cout << "Near ring!" << std::endl;
+                shire = false;
+                initMordorUniforms();
+                myCamera.setPlaneBindVar(false);
+            }
+        }
+        else {
+            mordorShader.useShaderProgram();
+            view = myCamera.getViewMatrix();
+            glUniformMatrix4fv(glGetUniformLocation(mordorShader.shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+            renderWithShadows(mordorShader);
+            glCheckError();
+            renderGrid();
+            glCheckError();
+            mordorSkybox.Draw(skyboxShader, view, projection);
+            screenQuadShader.useShaderProgram();
+            float currentTime = glfwGetTime();
+            offsetY = fmod(currentTime * speed, 1.0f);
+            glUniform1f(glGetUniformLocation(screenQuadShader.shaderProgram, "offsetY"), offsetY);
+            
+            secondAshQuad.Draw(screenQuadShader);
+            offsetY = fmod(currentTime * speed * 2, 1.0f);
+            glUniform1f(glGetUniformLocation(screenQuadShader.shaderProgram, "offsetY"), offsetY);
+            ashQuad.Draw(screenQuadShader);
+            if (getCameraDistance(mordorRingPos) < 2.0f) {
+                std::cout << "Near ring!" << std::endl;
+                shire = true;
+                initUniforms();
+                myCamera.setPlaneBindVar(true);
+            }
         }
     }
     if (presenting) {
@@ -1282,7 +1171,7 @@ void cleanup() {
     //cleanup code for your own data
     glDeleteTextures(1, &depthMapTexture);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDeleteFramebuffers(numCascades - 1, shadowMapFBOs);
+    glDeleteFramebuffers(1, &shadowMapFBO);
 }
 
 int main(int argc, const char* argv[]) {
@@ -1312,7 +1201,7 @@ int main(int argc, const char* argv[]) {
         processMovement();
         renderScene();
         glCheckError();
-        simTime += 0.007f;
+        simTime += 0.01f;
 
         glfwPollEvents();
         glfwSwapBuffers(myWindow.getWindow());

@@ -44,6 +44,14 @@ void computeDirLight()
     specular = specularStrength * specCoeff * lightColor;
 }
 
+float computeFog() { 
+    vec4 fPosEye = vec4(fPosition, 1.0f);
+	float fogDensity = 0.03f; 
+	float fragmentDistance = length(fPosEye); 
+	float fogFactor = exp(-pow(fragmentDistance * fogDensity, 2)); 
+	return clamp(fogFactor, 0.0f, 1.0f); 
+}
+
 void main() 
 {
     computeDirLight();
@@ -51,7 +59,10 @@ void main()
     //compute final vertex color
     vec3 color = min((ambient + diffuse) * texture(diffuseTexture, fTexCoords).rgb + specular, 1.0f);
     //vec3 color = texture(diffuseTexture, fTexCoords).rgb;
-
-    fColor = vec4(color, 1.0f);
+    float fogFactor = computeFog();
+	vec4 fogColor = vec4(0.8f, 0.1f, 0.1f, 1.0f);
+	vec4 auxColor = vec4(color, 1.0f);
+	fColor = fogColor * (1-fogFactor) + auxColor * fogFactor;
+    //fColor = vec4(color, 1.0f);
     //fColor = vec4(0.0f, 1.0f, 0.0f, 1.0f);
 }

@@ -13,8 +13,7 @@ uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 uniform	mat3 normalMatrix;
-uniform mat4 lightSpaceTrMatrix[4];
-uniform float cascadeSplits[4];
+uniform mat4 lightSpaceTrMatrix;
 
 void main() 
 {
@@ -22,13 +21,8 @@ void main()
 	fPosEye = view * model * vec4(vPosition, 1.0f);
 	fNormal = normalize(normalMatrix * vNormal);
 	fTexCoords = vTexCoords;
-	fragPosLightSpace=vec4(0.0f);
-	/*for (int i = 0; i < 4; ++i) {
-        if (fPosEye.z < cascadeSplits[i]) {
-            fragPosLightSpace = lightSpaceTrMatrix[i] * model * vec4(vPosition, 1.0f);
-            break;
-        }
-    }*/
+
+    fragPosLightSpace = lightSpaceTrMatrix * model * vec4(vPosition, 1.0f);
 	
 	gl_Position = projection * view * model * vec4(vPosition, 1.0f);
 }

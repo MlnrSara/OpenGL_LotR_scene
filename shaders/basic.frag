@@ -10,13 +10,12 @@ out vec4 fColor;
 //lighting
 uniform	vec3 lightDir;
 uniform	vec3 lightColor;
+uniform mat4 view;
 
 //texture
 uniform sampler2D diffuseTexture;
 uniform sampler2D specularTexture;
-uniform sampler2D shadowMaps[4];
-uniform mat4 lightSpaceMatrices[4];
-uniform float cascadeSplits[4];
+uniform sampler2D shadowMap;
 
 vec3 ambient;
 float ambientStrength = 0.2f;
@@ -33,7 +32,7 @@ void computeLightComponents()
 	vec3 normalEye = normalize(fNormal);	
 	
 	//compute light direction
-	vec3 lightDirN = normalize(lightDir);
+	vec3 lightDirN = normalize(view*vec4(lightDir,0.0f)).xyz;
 	
 	//compute view direction 
 	vec3 viewDirN = normalize(cameraPosEye - fPosEye.xyz);
@@ -50,11 +49,11 @@ void computeLightComponents()
 	specular = specularStrength * specCoeff * lightColor;
 }
 
-float computeShadow(int cascadeIndex){
+float computeShadow(){
 	vec3 normalizedCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
 	normalizedCoords = normalizedCoords * 0.5 + 0.5;
 
-	float closestDepth = texture(shadowMaps[cascadeIndex], normalizedCoords.xy).r;
+	float closestDepth = texture(shadowMap, normalizedCoords.xy).r;
 	float currentDepth = normalizedCoords.z;
 
 	float bias = 0.005f;
@@ -74,13 +73,8 @@ void main()
 	diffuse *= texture(diffuseTexture, fTexCoords).rgb;
 	specular *= texture(specularTexture, fTexCoords).rgb;
 
-	float shadow = 0.0;
-    for (int i = 0; i < 4; ++i) {
-        if (fPosEye.z < cascadeSplits[i]) {
-            shadow = computeShadow(i);
-            break;
-        }
-    }
+	float shadow = computeShadow();
+    
 	vec3 color = min((ambient + (1.0f - shadow)*diffuse) + (1.0f - shadow)*specular, 1.0f);
     
     fColor = vec4(color, 1.0f);
